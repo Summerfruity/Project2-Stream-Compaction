@@ -19,7 +19,15 @@ namespace StreamCompaction {
          */
         void scan(int n, int *odata, const int *idata) {
             timer().startCpuTimer();
-            // TODO
+            if (n <= 0) {
+                timer().endCpuTimer();
+                return;
+            }
+
+            odata[0] = 0;
+            for (int i = 1; i < n; i++) {
+                odata[i] = odata[i - 1] + idata[i - 1];
+            }
             timer().endCpuTimer();
         }
 
@@ -30,9 +38,21 @@ namespace StreamCompaction {
          */
         int compactWithoutScan(int n, int *odata, const int *idata) {
             timer().startCpuTimer();
-            // TODO
+            if (n <= 0) {
+                timer().endCpuTimer();
+                return 0;
+            }
+
+            int ptr = 0; // where to put the non-zero element
+
+            for (int i = 0; i < n; i++) {
+                if (idata[i] != 0) {
+                    odata[ptr] = idata[i];
+                    ptr++;
+                }
+            }
             timer().endCpuTimer();
-            return -1;
+            return ptr;
         }
 
         /**
@@ -42,9 +62,36 @@ namespace StreamCompaction {
          */
         int compactWithScan(int n, int *odata, const int *idata) {
             timer().startCpuTimer();
-            // TODO
+            if (n <= 0) {
+                timer().endCpuTimer();
+                return 0;
+            }
+
+            // Step 1: map to boolean
+            int* bools = new int[n];
+            for (int i = 0; i < n; i++) {
+                bools[i] = (idata[i] != 0) ? 1 : 0;
+            }
+
+            // Step 2: exclusive scan
+            int* indices = new int[n];
+            indices[0] = 0;
+            for (int i = 1; i < n; i++) {
+                indices[i] = indices[i-1] + bools[i-1];
+            }
+
+            // Step 3: scatter
+            for (int i = 0; i < n; i++) {
+                if (bools[i] == 1) {
+                    odata[indices[i]] = idata[i];
+                }
+            }
+
+            int count = indices[n - 1] + bools[n - 1]; // total count of non-zero elements
+            delete[] bools;
+            delete[] indices;
             timer().endCpuTimer();
-            return -1;
+            return count;
         }
     }
 }
