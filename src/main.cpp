@@ -13,8 +13,10 @@
 #include <stream_compaction/thrust.h>
 #include "testing_helpers.hpp"
 
-const int SIZE = 1 << 8; // feel free to change the size of array
+const int SIZE = 1 << 20; // large-scale test
 const int NPOT = SIZE - 3; // Non-Power-Of-Two
+const int WARMUP_RUNS = 1;
+const int BENCH_RUNS = 20;
 int *a = new int[SIZE];
 int *b = new int[SIZE];
 int *c = new int[SIZE];
@@ -146,6 +148,49 @@ int main(int argc, char* argv[]) {
     printElapsedTime(StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(), "(CUDA Measured)");
     //printArray(count, c, true);
     printCmpLenResult(count, expectedNPOT, b, c);
+
+    printf("\n");
+    printf("**********************************************\n");
+    printf("** SCAN BENCHMARK (drop warmup, average)   **\n");
+    printf("**********************************************\n");
+
+    auto benchmarkScan = [&](const char* name, int n, auto runOnce, auto getTimeMs) {
+        for (int i = 0; i < WARMUP_RUNS; ++i) {
+            runOnce();
+        }
+        double sum = 0.0;
+        for (int i = 0; i < BENCH_RUNS; ++i) {
+            runOnce();
+            sum += static_cast<double>(getTimeMs());
+        }
+        printf("    %-36s n=%d avg(%d runs) = %.6fms\n", name, n, BENCH_RUNS, sum / BENCH_RUNS);
+    };
+
+    benchmarkScan("cpu scan (power-of-two)", SIZE,
+        [&]() { StreamCompaction::CPU::scan(SIZE, b, a); },
+        [&]() { return StreamCompaction::CPU::timer().getCpuElapsedTimeForPreviousOperation(); });
+    benchmarkScan("naive scan (power-of-two)", SIZE,
+        [&]() { StreamCompaction::Naive::scan(SIZE, c, a); },
+        [&]() { return StreamCompaction::Naive::timer().getGpuElapsedTimeForPreviousOperation(); });
+    benchmarkScan("work-efficient scan (power-of-two)", SIZE,
+        [&]() { StreamCompaction::Efficient::scan(SIZE, c, a); },
+        [&]() { return StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(); });
+    benchmarkScan("thrust scan (power-of-two)", SIZE,
+        [&]() { StreamCompaction::Thrust::scan(SIZE, c, a); },
+        [&]() { return StreamCompaction::Thrust::timer().getGpuElapsedTimeForPreviousOperation(); });
+
+    benchmarkScan("cpu scan (non-power-of-two)", NPOT,
+        [&]() { StreamCompaction::CPU::scan(NPOT, b, a); },
+        [&]() { return StreamCompaction::CPU::timer().getCpuElapsedTimeForPreviousOperation(); });
+    benchmarkScan("naive scan (non-power-of-two)", NPOT,
+        [&]() { StreamCompaction::Naive::scan(NPOT, c, a); },
+        [&]() { return StreamCompaction::Naive::timer().getGpuElapsedTimeForPreviousOperation(); });
+    benchmarkScan("work-efficient scan (non-power-of-two)", NPOT,
+        [&]() { StreamCompaction::Efficient::scan(NPOT, c, a); },
+        [&]() { return StreamCompaction::Efficient::timer().getGpuElapsedTimeForPreviousOperation(); });
+    benchmarkScan("thrust scan (non-power-of-two)", NPOT,
+        [&]() { StreamCompaction::Thrust::scan(NPOT, c, a); },
+        [&]() { return StreamCompaction::Thrust::timer().getGpuElapsedTimeForPreviousOperation(); });
 
     system("pause"); // stop Win32 console from closing on exit
     delete[] a;
